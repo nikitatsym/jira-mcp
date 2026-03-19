@@ -38,6 +38,12 @@ def _is_bool_hint(hint) -> bool:
 def _coerce_call(fn, params: dict):
     sig = inspect.signature(fn)
     hints = typing.get_type_hints(fn)
+    unknown = set(params) - set(sig.parameters)
+    if unknown:
+        raise ValueError(
+            f"Unknown parameters: {sorted(unknown)}. "
+            f"Accepted: {list(sig.parameters)}"
+        )
     kwargs = {}
     for name, param in sig.parameters.items():
         if name not in params:

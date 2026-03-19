@@ -173,7 +173,7 @@ def jira_version():
 
 @_op(jira_read)
 def search_issues(jql: str, limit: int = 20, next_page_token: str | None = None):
-    """Search issues using JQL query. For next page, pass next_page_token from previous response."""
+    """Search issues using JQL. Paginate with next_page_token from response nextPageToken."""
     _SEARCH_FIELDS = ",".join(_SLIM_ISSUE_FIELDS)
     params: dict = {"jql": jql, "maxResults": limit, "fields": _SEARCH_FIELDS}
     if next_page_token is not None:
