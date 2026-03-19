@@ -167,9 +167,9 @@ def jira_version():
 @_op(jira_read)
 def search_issues(jql: str, limit: int = 20, offset: int = 0):
     """Search issues using JQL query."""
-    data = _get_client().get(
-        "/rest/api/3/search",
-        params={"jql": jql, "maxResults": limit, "startAt": offset},
+    data = _get_client().post(
+        "/rest/api/3/search/jql",
+        json={"jql": jql, "maxResults": limit, "startAt": offset},
     )
     if isinstance(data, dict) and "issues" in data:
         data["issues"] = [_slim_issue(i) for i in data["issues"]]
