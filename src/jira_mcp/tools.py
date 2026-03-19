@@ -54,12 +54,17 @@ def _slim_issue(issue: dict) -> dict:
     for f in ("summary", "updated", "labels"):
         if f in fields:
             result[f] = fields[f]
-    for f in ("status", "priority", "assignee", "issuetype"):
+    for f in ("status", "priority", "issuetype"):
         val = fields.get(f)
         if val is None:
             result[f] = None
         elif isinstance(val, dict):
             result[f] = val.get("name")
+    assignee = fields.get("assignee")
+    if assignee is None:
+        result["assignee"] = None
+    elif isinstance(assignee, dict):
+        result["assignee"] = assignee.get("displayName")
     return result
 
 
@@ -167,7 +172,8 @@ def jira_version():
 @_op(jira_read)
 def search_issues(jql: str, limit: int = 20, next_page_token: str | None = None):
     """Search issues using JQL query. For next page, pass next_page_token from previous response."""
-    params: dict = {"jql": jql, "maxResults": limit}
+    _SEARCH_FIELDS = ",".join(_SLIM_ISSUE_FIELDS)
+    params: dict = {"jql": jql, "maxResults": limit, "fields": _SEARCH_FIELDS}
     if next_page_token is not None:
         params["nextPageToken"] = next_page_token
     data = _get_client().get(
