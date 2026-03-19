@@ -65,12 +65,22 @@ class JiraClient:
         return self._handle(self._http.post(path, headers=headers, **kwargs))
 
     def get_raw(self, path: str, **kwargs) -> httpx.Response:
-        """GET returning raw response (for binary downloads)."""
-        r = self._http.get(path, **kwargs)
+        """GET returning raw response (for binary downloads).
+
+        Jira redirects attachment downloads to CDN. We follow the
+        redirect manually without auth headers (CDN rejects them).
+        """
+        r = self._http.get(path, follow_redirects=False, **kwargs)
         if r.status_code >= 400:
             try:
                 body = r.json()
             except Exception:
                 body = r.text
             raise APIError(r.status_code, r.request.method, str(r.url), body)
+        if r.is_redirect:
+            redirect_url = r.headers.get("location")
+            if redirect_url:
+                r = httpx.get(redirect_url, timeout=60.0)
+                if r.status_code >= 400:
+                    raise APIError(r.status_code, "GET", redirect_url, r.text)
         return r

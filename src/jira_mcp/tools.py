@@ -362,7 +362,7 @@ def get_attachment(attachment_id: str):
 
 @_op(jira_read)
 def download_attachment(attachment_id: str, path: str | None = None):
-    """Download an attachment to a local file. Returns saved filepath and size."""
+    """Download an attachment. Omit path to save to OS temp dir. Returns saved filepath and size."""
     meta = _get_client().get(f"/rest/api/3/attachment/{attachment_id}")
     filename = meta.get("filename", f"attachment_{attachment_id}")
     if path is None:
