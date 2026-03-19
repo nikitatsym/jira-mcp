@@ -4,11 +4,6 @@ MCP server for Jira Cloud — issue tracking, project management, and agile work
 
 ## Install
 
-```
-uvx --extra-index-url https://nikitatsym.github.io/jira-mcp/simple jira-mcp
-```
-
-## Configure
 
 ```json
 {
