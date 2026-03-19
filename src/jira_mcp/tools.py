@@ -38,6 +38,8 @@ _SLIM_BOARD_FIELDS = {"id", "name", "type"}
 
 _SLIM_ATTACHMENT_FIELDS = {"id", "filename", "mimeType", "size", "created"}
 
+_SLIM_USER_FIELDS = {"accountId", "displayName", "emailAddress", "active"}
+
 
 def _slim(item: dict, fields: set) -> dict:
     return {k: v for k, v in item.items() if k in fields}
@@ -188,7 +190,40 @@ def search_issues(jql: str, limit: int = 20, next_page_token: str | None = None)
 @_op(jira_read)
 def get_issue(issue_key: str):
     """Get full detail of a specific issue."""
-    return _get_client().get(f"/rest/api/3/issue/{issue_key}")
+    data = _get_client().get(f"/rest/api/3/issue/{issue_key}")
+    if isinstance(data, dict):
+        _clean_issue(data)
+    return data
+
+
+def _clean_issue(issue: dict) -> None:
+    """Remove noise from a full issue response (in-place)."""
+    fields = issue.get("fields")
+    if not isinstance(fields, dict):
+        return
+    # Drop custom fields with null values
+    to_drop = [k for k, v in fields.items() if k.startswith("customfield_") and v is None]
+    for k in to_drop:
+        del fields[k]
+    # Remove embedded worklog (use dedicated operation)
+    fields.pop("worklog", None)
+    # Slim embedded comments
+    comment_data = fields.get("comment")
+    if isinstance(comment_data, dict) and "comments" in comment_data:
+        comment_data["comments"] = [_slim_comment(c) for c in comment_data["comments"]]
+    # Strip avatarUrls from nested user objects
+    _strip_avatars(fields)
+
+
+def _strip_avatars(obj):
+    """Recursively remove avatarUrls from dicts."""
+    if isinstance(obj, dict):
+        obj.pop("avatarUrls", None)
+        for v in obj.values():
+            _strip_avatars(v)
+    elif isinstance(obj, list):
+        for item in obj:
+            _strip_avatars(item)
 
 
 @_op(jira_read)
@@ -212,16 +247,22 @@ def get_issue_transitions(issue_key: str):
 @_op(jira_read)
 def get_issue_watchers(issue_key: str):
     """Get watchers of an issue."""
-    return _get_client().get(f"/rest/api/3/issue/{issue_key}/watchers")
+    data = _get_client().get(f"/rest/api/3/issue/{issue_key}/watchers")
+    if isinstance(data, dict) and "watchers" in data:
+        data["watchers"] = _slim_list(data["watchers"], _SLIM_USER_FIELDS)
+    return data
 
 
 @_op(jira_read)
 def get_issue_changelog(issue_key: str, limit: int = 20):
     """Get history of field changes on an issue."""
-    return _get_client().get(
+    data = _get_client().get(
         f"/rest/api/3/issue/{issue_key}/changelog",
         params={"maxResults": limit},
     )
+    if isinstance(data, dict):
+        _strip_avatars(data)
+    return data
 
 
 @_op(jira_read)
@@ -245,7 +286,12 @@ def get_project(project_key: str):
 @_op(jira_read)
 def list_statuses():
     """List all issue statuses."""
-    return _get_client().get("/rest/api/3/status")
+    data = _get_client().get("/rest/api/3/status")
+    if isinstance(data, list):
+        return [{"id": s.get("id"), "name": s.get("name"),
+                 "category": s.get("statusCategory", {}).get("name")}
+                for s in data if isinstance(s, dict)]
+    return data
 
 
 @_op(jira_read)
@@ -257,7 +303,11 @@ def list_priorities():
 @_op(jira_read)
 def list_fields():
     """List all fields including custom fields."""
-    return _get_client().get("/rest/api/3/field")
+    data = _get_client().get("/rest/api/3/field")
+    if isinstance(data, list):
+        return [{"id": f.get("id"), "name": f.get("name"), "custom": f.get("custom")}
+                for f in data if isinstance(f, dict)]
+    return data
 
 
 @_op(jira_read)
@@ -280,16 +330,22 @@ def list_labels(limit: int = 20):
 @_op(jira_read)
 def search_users(query: str, limit: int = 20):
     """Search for users by name or email."""
-    return _get_client().get(
+    data = _get_client().get(
         "/rest/api/3/user/search",
         params={"query": query, "maxResults": limit},
     )
+    if isinstance(data, list):
+        return _slim_list(data, _SLIM_USER_FIELDS)
+    return data
 
 
 @_op(jira_read)
 def get_myself():
     """Get the current authenticated user."""
-    return _get_client().get("/rest/api/3/myself")
+    data = _get_client().get("/rest/api/3/myself")
+    if isinstance(data, dict):
+        return _slim(data, _SLIM_USER_FIELDS)
+    return data
 
 
 @_op(jira_read)
