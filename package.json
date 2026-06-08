@@ -1,0 +1,11 @@
+{
+  "name": "jira-mcp-scripts",
+  "private": true,
+  "scripts": {
+    "test": "uv run pytest tests/ -m 'not integration'",
+    "test:integration": "uv run pytest tests/ -m integration -v",
+    "test:all": "uv run pytest tests/ -v",
+    "typecheck": "uv run mypy src/",
+    "jira:bootstrap": "uv run python scripts/bootstrap.py"
+  }
+}

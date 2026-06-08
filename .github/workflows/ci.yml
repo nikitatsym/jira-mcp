@@ -42,6 +42,31 @@ jobs:
       - name: Type check
         run: uv run mypy src/
 
+  integration-jira:
+    runs-on: ubuntu-latest
+    # Skip on PRs from forks where secrets aren't available.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    env:
+      JIRA_URL: ${{ secrets.JIRA_URL }}
+      JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+      JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
+      JIRA_TEST_PROJECT: ${{ secrets.JIRA_TEST_PROJECT }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Verify secrets are set
+        run: |
+          for v in JIRA_URL JIRA_EMAIL JIRA_TOKEN JIRA_TEST_PROJECT; do
+            if [ -z "${!v}" ]; then
+              echo "ERROR: secret $v is empty — set repository secrets" >&2
+              exit 1
+            fi
+          done
+      - name: Bootstrap
+        run: uv run python scripts/bootstrap.py
+      - name: Integration tests
+        run: uv run pytest tests/ -m integration -v
+
   release:
     needs: [unit, typecheck]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'

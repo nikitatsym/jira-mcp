@@ -32,13 +32,11 @@ class JiraClient:
         self._email = email or s.jira_email
         self._token = token or s.jira_token
         creds = base64.b64encode(f"{self._email}:{self._token}".encode()).decode()
-        headers = {
-            "Authorization": f"Basic {creds}",
-            "Content-Type": "application/json",
-        }
+        # No default Content-Type — httpx sets it per request based on json=/files=/data=.
+        # A default 'application/json' would force multipart upload to fail with 415.
         self._http = httpx.Client(
             base_url=self._base,
-            headers=headers,
+            headers={"Authorization": f"Basic {creds}"},
             timeout=30.0,
         )
 
