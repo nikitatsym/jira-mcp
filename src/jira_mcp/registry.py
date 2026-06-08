@@ -1,3 +1,6 @@
+"""Tool registration primitives."""
+
+
 class Group:
     """A named group of MCP tool operations exposed as a single meta-tool."""
 
@@ -11,8 +14,42 @@ class Group:
 ROOT = Group("root", "")
 
 
+class _Unset:
+    """Sentinel singleton: caller did not pass this field.
+
+    Distinct from `None`. `None` means "caller explicitly passed null" — the
+    Jira API treats null as a clearing operation on some nullable fields
+    (e.g. clearing an assignee, due date, or reporter). Optional body params
+    declared with default `_UNSET` carry the omitted-vs-cleared distinction
+    through Pydantic validation (`exclude_unset=True`) and on to the wire
+    (`_body` drops `_UNSET` but, when the field is listed in `keep_null=`,
+    keeps an explicit `None`).
+    """
+
+    _instance: "_Unset | None" = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+    def __repr__(self) -> str:
+        return "_UNSET"
+
+    def __bool__(self) -> bool:
+        return False
+
+
+_UNSET = _Unset()
+
+
 def _op(group: Group):
-    """Mark a function as an MCP tool in the given group."""
+    """Mark a function as an MCP tool in the given group.
+
+    A Pydantic params model is built from the signature at server registration
+    time; descriptions/constraints in `Annotated[T, Field(...)]` flow into the
+    JSON Schema returned by `operation='schema'`.
+    """
 
     def decorator(fn):
         if not fn.__doc__:

@@ -1,8 +1,14 @@
+from __future__ import annotations
+
 import base64
+import logging
+import time
 
 import httpx
 
 from .config import get_settings
+
+_log = logging.getLogger("jira_mcp.client")
 
 
 class APIError(Exception):
@@ -36,7 +42,20 @@ class JiraClient:
             timeout=30.0,
         )
 
-    def _handle(self, r: httpx.Response):
+    def _handle(self, r: httpx.Response, *, started: float | None = None):
+        if started is not None:
+            duration_ms = int((time.perf_counter() - started) * 1000)
+            status = r.status_code
+            if status >= 500:
+                level = logging.ERROR
+            elif status >= 400:
+                level = logging.WARNING
+            else:
+                level = logging.INFO
+            _log.log(
+                level, "%s %s %d %dms",
+                r.request.method, r.request.url.path, status, duration_ms,
+            )
         if r.status_code >= 400:
             try:
                 body = r.json()
@@ -48,21 +67,30 @@ class JiraClient:
         return r.json()
 
     def get(self, path: str, **kwargs):
-        return self._handle(self._http.get(path, **kwargs))
+        started = time.perf_counter()
+        return self._handle(self._http.get(path, **kwargs), started=started)
 
     def post(self, path: str, **kwargs):
-        return self._handle(self._http.post(path, **kwargs))
+        started = time.perf_counter()
+        return self._handle(self._http.post(path, **kwargs), started=started)
 
     def put(self, path: str, **kwargs):
-        return self._handle(self._http.put(path, **kwargs))
+        started = time.perf_counter()
+        return self._handle(self._http.put(path, **kwargs), started=started)
 
     def delete(self, path: str, **kwargs):
-        return self._handle(self._http.request("DELETE", path, **kwargs))
+        started = time.perf_counter()
+        return self._handle(
+            self._http.request("DELETE", path, **kwargs), started=started,
+        )
 
     def post_multipart(self, path: str, **kwargs):
         """POST with multipart form data (no JSON content-type)."""
         headers = {"X-Atlassian-Token": "no-check"}
-        return self._handle(self._http.post(path, headers=headers, **kwargs))
+        started = time.perf_counter()
+        return self._handle(
+            self._http.post(path, headers=headers, **kwargs), started=started,
+        )
 
     def get_raw(self, path: str, **kwargs) -> httpx.Response:
         """GET returning raw response (for binary downloads).
@@ -70,13 +98,22 @@ class JiraClient:
         Jira redirects attachment downloads to CDN. We follow the
         redirect manually without auth headers (CDN rejects them).
         """
+        started = time.perf_counter()
         r = self._http.get(path, follow_redirects=False, **kwargs)
-        if r.status_code >= 400:
+        duration_ms = int((time.perf_counter() - started) * 1000)
+        status = r.status_code
+        level = (
+            logging.ERROR if status >= 500
+            else logging.WARNING if status >= 400
+            else logging.INFO
+        )
+        _log.log(level, "GET %s %d %dms", r.request.url.path, status, duration_ms)
+        if status >= 400:
             try:
                 body = r.json()
             except Exception:
                 body = r.text
-            raise APIError(r.status_code, r.request.method, str(r.url), body)
+            raise APIError(status, r.request.method, str(r.url), body)
         if r.is_redirect:
             redirect_url = r.headers.get("location")
             if redirect_url:
