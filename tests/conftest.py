@@ -1,20 +1,11 @@
-"""Unit-test fixtures for jira-mcp.
-
-PR1 ships the v2.5 scaffolding (Pydantic params model, schema, help with
-search/cross-group hints, _UNSET sentinel). The tools.py refactor lands in
-PR2; here we exercise the scaffolding against a fixed set of *synthetic*
-ops so PR1 is independently shippable and the tests don't bind to the
-real ops' future shape.
-
-`integration` marker is registered for forward-compatibility with PR3 —
-no integration tests in PR1.
-"""
+"""Unit-test fixtures for jira-mcp."""
 
 from __future__ import annotations
 
 import json
-from typing import Annotated, Any, Literal, Optional
+from typing import Annotated, Any, Callable, Literal, Optional
 
+import httpx
 import pytest
 from pydantic import Field
 
@@ -168,3 +159,58 @@ class AgentSimulator:
 @pytest.fixture
 def agent() -> AgentSimulator:
     return AgentSimulator()
+
+
+# ── HTTP MockTransport ──────────────────────────────────────────────────────
+
+
+class MockJira:
+    """Record requests and return scripted responses."""
+
+    def __init__(self):
+        self.requests: list[httpx.Request] = []
+        self.handlers: list[Callable[[httpx.Request], httpx.Response]] = []
+
+    def handler(self, fn: Callable[[httpx.Request], httpx.Response]) -> "MockJira":
+        self.handlers.append(fn)
+        return self
+
+    def respond(self, request: httpx.Request) -> httpx.Response:
+        self.requests.append(request)
+        for h in self.handlers:
+            r = h(request)
+            if r is not None:
+                return r
+        return httpx.Response(500, json={"err": "no handler matched"})
+
+
+@pytest.fixture
+def mock_jira(monkeypatch):
+    """Replace the singleton JiraClient with one wired to a MockTransport."""
+    from jira_mcp import client as client_module
+    from jira_mcp import tools as tools_module
+
+    mock = MockJira()
+    transport = httpx.MockTransport(mock.respond)
+
+    real_init = client_module.JiraClient.__init__
+
+    def _mocked_init(self, *args, **kwargs):
+        real_init(self, *args, **kwargs)
+        self._http = httpx.Client(
+            base_url=self._http.base_url,
+            headers=self._http.headers,
+            transport=transport,
+        )
+
+    monkeypatch.setattr(client_module.JiraClient, "__init__", _mocked_init)
+    monkeypatch.setattr(tools_module, "_client", None)
+    # Force env so client construction doesn't fail.
+    monkeypatch.setenv("JIRA_URL", "https://mock.atlassian.net")
+    monkeypatch.setenv("JIRA_EMAIL", "test@example.com")
+    monkeypatch.setenv("JIRA_TOKEN", "mock-token")
+    from jira_mcp.config import _reset_settings
+    _reset_settings()
+    yield mock
+    monkeypatch.setattr(tools_module, "_client", None)
+    _reset_settings()
