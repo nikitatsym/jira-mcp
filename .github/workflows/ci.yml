@@ -6,6 +6,7 @@ on:
     paths:
       - src/**
       - tests/**
+      - dev.py
       - pyproject.toml
       - package.json
       - .github/workflows/ci.yml
@@ -15,6 +16,7 @@ on:
     paths:
       - src/**
       - tests/**
+      - dev.py
       - pyproject.toml
       - package.json
       - .github/workflows/ci.yml
@@ -26,21 +28,13 @@ permissions:
   id-token: write
 
 jobs:
-  unit:
+  check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
-      - name: Run unit tests
-        run: uv run pytest tests/ -m 'not integration' -v
-
-  typecheck:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-      - name: Type check
-        run: uv run mypy src/
+      - name: Check
+        run: uv run python dev.py check
 
   integration-jira:
     runs-on: ubuntu-latest
@@ -68,7 +62,7 @@ jobs:
         run: uv run pytest tests/ -m integration -v
 
   release:
-    needs: [unit, typecheck]
+    needs: [check]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment:

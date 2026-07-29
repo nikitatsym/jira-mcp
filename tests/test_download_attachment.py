@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 
 import httpx
-import pytest
 
 from jira_mcp.tools import download_attachment
 

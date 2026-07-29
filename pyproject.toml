@@ -23,4 +23,13 @@ jira-mcp = "jira_mcp:main"
 dev = [
     "mypy>=2.1.0",
     "pytest>=9.0.2",
+    "ruff==0.16.0",
 ]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+
+[tool.mypy]
+python_version = "3.10"

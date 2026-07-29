@@ -8,7 +8,7 @@ import httpx
 import pytest
 from pydantic import ValidationError
 
-from jira_mcp.server import _build_params_model, _coerce_call
+from jira_mcp.server import _build_params_model
 from jira_mcp.tools import assign_issue
 
 

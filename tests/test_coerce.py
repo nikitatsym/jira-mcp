@@ -5,12 +5,10 @@ Focused tests for the validator path. Synthetic, no env required.
 
 from __future__ import annotations
 
-from typing import Optional
-
 import pytest
+from pydantic import ValidationError
 
 from jira_mcp.server import _build_params_model, _coerce_call, _format_validation_error
-from pydantic import ValidationError
 
 
 class TestStringBoolCoercion:
@@ -62,7 +60,7 @@ class TestStringBoolCoercion:
         assert model.model_validate({"label": "true"}).label == "true"
 
     def test_optional_bool_coerced(self):
-        def fn(flag: Optional[bool] = None):
+        def fn(flag: bool | None = None):
             """Test."""
             return flag
 

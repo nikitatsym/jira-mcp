@@ -85,7 +85,7 @@ class TestPositiveWireShapes:
 class TestNegativeCases:
     def test_camelcase_parent_key_rejected_at_dispatch(self):
         """Unknown wire-name via dispatch raises field-level Pydantic error."""
-        from jira_mcp.server import _coerce_call, _build_params_model
+        from jira_mcp.server import _build_params_model, _coerce_call
         create_issue._params_model = _build_params_model(create_issue)
         with pytest.raises(ValueError) as exc:
             _coerce_call(create_issue, {

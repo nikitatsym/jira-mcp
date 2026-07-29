@@ -7,7 +7,7 @@ real jira-mcp ops (whose annotations land in PR2). The four shape forms
 
 from __future__ import annotations
 
-from typing import Annotated, Optional
+from typing import Annotated
 
 import pytest
 from pydantic import Field
@@ -62,7 +62,7 @@ def optional_nullable(assignee: str | None = None):
 def with_description(
     owner: str,
     body: Annotated[
-        Optional[str],
+        str | None,
         Field(description="Body markdown. Must contain <brief>summary</brief>."),
     ] = None,
 ):

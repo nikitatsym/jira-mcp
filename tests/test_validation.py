@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import pytest
-
 from jira_mcp.server import _build_params_model
-from jira_mcp.tools import create_issue, update_issue, transition_issue, assign_issue
+from jira_mcp.tools import assign_issue, create_issue, transition_issue, update_issue
 
 
 class TestCreateIssueSchema:

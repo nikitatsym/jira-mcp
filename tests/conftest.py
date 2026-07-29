@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import json
-from typing import Annotated, Any, Callable, Literal, Optional
+from collections.abc import Callable
+from typing import Annotated, Any, Literal
 
 import httpx
 import pytest
@@ -51,7 +52,7 @@ def create_thing(
     owner: str,
     name: str,
     body: Annotated[
-        Optional[str],
+        str | None,
         Field(description="Free-text body. Must contain <brief>summary</brief>."),
     ] = None,
     priority: Literal["low", "medium", "high"] = "medium",
@@ -69,7 +70,7 @@ def create_thing(
 def update_thing(
     thing_id: int,
     name: str = _UNSET,
-    body: Optional[str] = _UNSET,
+    body: str | None = _UNSET,
     archived: bool = _UNSET,
 ):
     """Update an existing thing — every field is optional."""
@@ -171,7 +172,7 @@ class MockJira:
         self.requests: list[httpx.Request] = []
         self.handlers: list[Callable[[httpx.Request], httpx.Response]] = []
 
-    def handler(self, fn: Callable[[httpx.Request], httpx.Response]) -> "MockJira":
+    def handler(self, fn: Callable[[httpx.Request], httpx.Response]) -> MockJira:
         self.handlers.append(fn)
         return self
 

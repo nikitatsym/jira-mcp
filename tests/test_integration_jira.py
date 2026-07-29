@@ -7,7 +7,6 @@ JIRA_TEST_PROJECT aren't set. Run via `npm run test:integration` or
 
 from __future__ import annotations
 
-import io
 import os
 import tempfile
 import time
@@ -44,8 +43,8 @@ pytestmark = [
 
 @pytest.fixture(scope="module")
 def client():
-    from jira_mcp.config import _reset_settings
     from jira_mcp import tools as tools_module
+    from jira_mcp.config import _reset_settings
 
     _reset_settings()
     tools_module._client = None
@@ -82,7 +81,9 @@ def issue(client, project) -> str:
     yield key
     try:
         delete_issue(issue_key=key)
-    except Exception:
+    # teardown runs after the test already passed/failed on its own merits;
+    # an exception here must not turn that outcome into a fixture error.
+    except Exception:  # noqa: BLE001, S110 - best-effort cleanup only
         pass
 
 
@@ -138,7 +139,9 @@ class TestIssueLifecycle:
 class TestAttachments:
     def test_upload_download_delete(self, issue):
         from jira_mcp.tools import (
-            delete_attachment, download_attachment, list_attachments,
+            delete_attachment,
+            download_attachment,
+            list_attachments,
             upload_attachment,
         )
         with tempfile.NamedTemporaryFile(
@@ -165,8 +168,11 @@ class TestAttachments:
 class TestIssueLinks:
     def test_create_list_delete(self, client, project):
         from jira_mcp.tools import (
-            create_issue, create_issue_link, delete_issue,
-            delete_issue_link, list_issue_links,
+            create_issue,
+            create_issue_link,
+            delete_issue,
+            delete_issue_link,
+            list_issue_links,
         )
         a = create_issue(
             project_key=project, issue_type="Task",
