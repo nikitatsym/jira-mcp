@@ -7,7 +7,7 @@ import types
 import typing
 from typing import Any
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -21,7 +21,7 @@ from pydantic_core import PydanticUndefined
 from . import tools as _tools_module
 from .registry import ROOT, _UNSET, _Unset
 
-mcp = FastMCP("jira")
+mcp = MCPServer("jira")
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────

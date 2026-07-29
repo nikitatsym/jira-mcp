@@ -2,10 +2,10 @@
 of returning `{"error": ...}` dicts.
 
 Module note on limitation: these tests pin the *function-level* contract
-(raise vs return). The actual regression risk lives at the FastMCP
-serialization boundary — i.e. whether FastMCP surfaces the raise as a
+(raise vs return). The actual regression risk lives at the MCPServer
+serialization boundary — i.e. whether MCPServer surfaces the raise as a
 `tool_call_error` rather than wrapping it as a successful payload. That
-layer isn't unit-testable without a full FastMCP harness; the PR3
+layer isn't unit-testable without a full MCPServer harness; the PR3
 integration tests cover it end-to-end against a real Jira tenant.
 """
 

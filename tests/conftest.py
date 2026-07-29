@@ -25,7 +25,7 @@ def pytest_configure(config):
 # ── Synthetic test ops ──────────────────────────────────────────────────────
 #
 # These exist purely to give server/help/schema something to chew on without
-# importing real tools.py. They aren't registered with FastMCP — tests reach
+# importing real tools.py. They aren't registered with MCPServer — tests reach
 # them directly through helper fixtures.
 
 
