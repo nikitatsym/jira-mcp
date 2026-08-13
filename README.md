@@ -65,6 +65,8 @@ Call any group with `operation="help"` to list operations and their typed signat
 
 Tested against a real Jira Cloud sandbox. Unit tests use `httpx.MockTransport` (no network); integration tests are gated on env vars.
 
+`tests/test_swagger_conformance.py` reads every registered op off its own AST and asserts method, path, query-param names and top-level body-field names against Atlassian's published OpenAPI documents, vendored gzipped under `tests/specs/`. It needs neither network nor credentials; its module docstring carries the refresh commands for the vendored copies.
+
 ```bash
 uv sync
 npm run test               # unit tests, no network
