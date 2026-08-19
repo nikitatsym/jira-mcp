@@ -130,18 +130,18 @@ def _fields_csv(payload: dict) -> str:
 jira_read = Group(
     "jira_read",
     "Query Jira data (safe, read-only).\n\n"
-    "Call with operation=\"help\" to list all available read operations.\n"
+    "Call with operation=\"$help\" to list all available read operations.\n"
     "Otherwise pass the operation name and a JSON object with parameters.\n\n"
-    "Example: jira_read(operation=\"SearchIssues\", "
+    "Example: jira_read(operation=\"$SearchIssues\", "
     "params={\"jql\": \"project = PROJ AND status = Open\"})",
 )
 
 jira_write = Group(
     "jira_write",
     "Create or update Jira resources (non-destructive).\n\n"
-    "Call with operation=\"help\" to list all available write operations.\n"
+    "Call with operation=\"$help\" to list all available write operations.\n"
     "Otherwise pass the operation name and a JSON object with parameters.\n\n"
-    "Example: jira_write(operation=\"CreateIssue\", "
+    "Example: jira_write(operation=\"$CreateIssue\", "
     "params={\"project_key\": \"PROJ\", \"issue_type\": \"Task\", \"summary\": \"Fix login bug\"})",
 )
 
@@ -150,17 +150,17 @@ jira_execute = Group(
     "Trigger Jira state changes (transition, assign, unassign).\n\n"
     "Distinct from write because these are side-effects on existing issues "
     "rather than resource creation.\n\n"
-    "Call with operation=\"help\" to list all available execute operations.\n\n"
-    "Example: jira_execute(operation=\"TransitionIssue\", "
+    "Call with operation=\"$help\" to list all available execute operations.\n\n"
+    "Example: jira_execute(operation=\"$TransitionIssue\", "
     "params={\"issue_key\": \"PROJ-1\", \"transition_id\": \"31\"})",
 )
 
 jira_delete = Group(
     "jira_delete",
     "Delete Jira resources (destructive, irreversible).\n\n"
-    "Call with operation=\"help\" to list all available delete operations.\n"
+    "Call with operation=\"$help\" to list all available delete operations.\n"
     "Otherwise pass the operation name and a JSON object with parameters.\n\n"
-    "Example: jira_delete(operation=\"DeleteIssue\", "
+    "Example: jira_delete(operation=\"$DeleteIssue\", "
     "params={\"issue_key\": \"PROJ-123\"})",
 )
 
