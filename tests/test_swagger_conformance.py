@@ -51,6 +51,7 @@ from typing import Any, Literal, TypeGuard
 import pytest
 
 from jira_mcp import tools
+from jira_mcp.registry import _UNSET
 
 # Ops whose call shape the extractor below cannot read. ONLY code shapes belong
 # here - never a name mismatch, which is the whole point of this test.
@@ -114,11 +115,14 @@ class _WireCall:
     # Body names per media kind; None where the payload is opaque.
     json_body: frozenset[str] | None
     form_body: frozenset[str] | None
+    # Sources of actual top-level JSON properties, resolved with this call's
+    # payload expression instead of every dictionary in the operation.
+    json_sources: dict[str, str | object]
 
 
 # Stand-in for a call the extractor gave up on; dropped with the rest once the
 # op is marked unreadable.
-_UNREADABLE = _WireCall("", "", frozenset(), frozenset(), frozenset())
+_UNREADABLE = _WireCall("", "", frozenset(), frozenset(), frozenset(), {})
 
 
 def _is_named(node: ast.expr | None, name: str) -> bool:
@@ -314,6 +318,7 @@ class _OpExtractor:
         path = self._path(args[0])
         query: set[str] = set()
         bodies: dict[str, set[str] | None] = {}
+        json_sources: dict[str, str | object] = {}
         for kw in node.keywords:
             kind = _BODY_KWARGS.get(kw.arg or "")
             if kw.arg == "params":
@@ -326,6 +331,10 @@ class _OpExtractor:
                     query |= names
             elif kind is not None:
                 bodies[kind] = self._payload(kw.value)
+                if kind == "json":
+                    json_sources = _body_field_sources(
+                        self.stmts, set(self.params), kw.value
+                    )
             elif kw.arg not in _NO_PAYLOAD_KWARGS:
                 self._block(f"{verb}() carries a payload in {kw.arg!r}")
         return _WireCall(
@@ -334,6 +343,7 @@ class _OpExtractor:
             frozenset(query),
             _freeze(bodies.get("json", set())),
             _freeze(bodies.get("form", set())),
+            json_sources,
         )
 
     def _path(self, node: ast.expr) -> str:
@@ -423,6 +433,11 @@ class _Spec:
         # declares unnamed (a binary upload or a bare JSON scalar), a missing
         # entry is a media kind the endpoint does not accept at all.
         self.bodies: dict[tuple[str, str], dict[str, frozenset[str] | None]] = {}
+        # Properties the matching media schema requires. Keeping this separate
+        # from `bodies` matters: a name may be accepted but optional.
+        self.required_bodies: dict[
+            tuple[str, str], dict[str, frozenset[str] | None]
+        ] = {}
         self._templates: dict[str, list[str | None]] = {}
         for doc in docs:
             schemas = (doc.get("components") or {}).get("schemas") or {}
@@ -456,6 +471,9 @@ class _Spec:
         self.endpoints[key] = frozenset(query)
         self.query_enums[key] = enums
         self.bodies[key] = self._body_kinds(operation.get("requestBody"), schemas)
+        self.required_bodies[key] = self._required_body_kinds(
+            operation.get("requestBody"), schemas
+        )
 
     def _body_kinds(
         self, request_body: Any, schemas: dict[str, Any]
@@ -474,6 +492,57 @@ class _Spec:
                 else:
                     kinds[kind] = kinds[kind] | names
         return {kind: _freeze(names) for kind, names in kinds.items()}
+
+    def _required_body_kinds(
+        self, request_body: Any, schemas: dict[str, Any]
+    ) -> dict[str, frozenset[str] | None]:
+        """Properties every accepted media schema requires, by payload kind."""
+        kinds: dict[str, set[str] | None] = {}
+        if isinstance(request_body, dict):
+            for media_type, media in (request_body.get("content") or {}).items():
+                kind = _media_kind(media_type)
+                if kind is None:
+                    continue
+                required = self._required_properties((media or {}).get("schema"), schemas)
+                if kind not in kinds:
+                    kinds[kind] = required
+                elif required is None or kinds[kind] is None:
+                    kinds[kind] = None
+                else:
+                    kinds[kind] &= required
+        return {kind: _freeze(names) for kind, names in kinds.items()}
+
+    def _required_properties(
+        self, schema: Any, schemas: dict[str, Any], depth: int = 0
+    ) -> set[str] | None:
+        """Top-level writable properties required by every valid schema branch."""
+        if depth > _MAX_SCHEMA_DEPTH:
+            raise ValueError(f"schema nesting deeper than {_MAX_SCHEMA_DEPTH} refs")
+        if not isinstance(schema, dict):
+            return None
+        ref = schema.get("$ref")
+        if ref:
+            return self._required_properties(self._resolve(ref, schemas), schemas, depth + 1)
+        declared = schema.get("properties") or {}
+        required = set(schema.get("required") or ()) - {
+            name
+            for name, prop in declared.items()
+            if self._read_only(prop, schemas)
+        }
+        for member in schema.get("allOf") or ():
+            member_required = self._required_properties(member, schemas, depth + 1)
+            if member_required is None:
+                return None
+            required |= member_required
+        alternatives = [*(schema.get("anyOf") or ()), *(schema.get("oneOf") or ())]
+        if alternatives:
+            branches = [
+                self._required_properties(member, schemas, depth + 1) for member in alternatives
+            ]
+            if any(branch is None for branch in branches):
+                return None
+            required |= set.intersection(*[branch for branch in branches if branch is not None])
+        return required
 
     def _properties(
         self, schema: Any, schemas: dict[str, Any], depth: int = 0
@@ -628,6 +697,106 @@ def _arg_wire_names(fn: Callable[..., Any]) -> dict[str, str]:
                     mapping[value.id] = key.value
     return mapping
 
+_CONCRETE = object()
+_NULL = object()
+_UNKNOWN = object()
+
+
+def _body_value_source(value: ast.expr, params: set[str]) -> str | object:
+    """The one parameter controlling a field, or a value this check cannot prove."""
+    sources = {node.id for node in ast.walk(value) if isinstance(node, ast.Name) and node.id in params}
+    if len(sources) == 1:
+        return sources.pop()
+    if sources:
+        return _UNKNOWN
+    if isinstance(value, ast.Constant):
+        return _NULL if value.value is None else _CONCRETE
+    if isinstance(value, (ast.Dict, ast.List, ast.Tuple, ast.Set)):
+        return _CONCRETE
+    return _UNKNOWN
+
+
+def _body_field_sources(
+    stmts: list[ast.stmt], params: set[str], body: ast.expr
+) -> dict[str, str | object]:
+    """Unconditionally serialized fields of this call's top-level JSON object."""
+    parents = {
+        child: node
+        for stmt in stmts
+        for node in ast.walk(stmt)
+        for child in ast.iter_child_nodes(node)
+    }
+    sources: dict[str, set[str | object]] = {}
+
+    def is_unconditional(owner: ast.AST) -> bool:
+        ancestor = parents.get(owner)
+        while ancestor is not None:
+            if isinstance(ancestor, (ast.If, ast.For, ast.AsyncFor, ast.While, ast.Try)):
+                return False
+            ancestor = parents.get(ancestor)
+        return True
+
+    def add(key: ast.expr | None, value: ast.expr, owner: ast.AST) -> None:
+        if (
+            not is_unconditional(owner)
+            or not isinstance(key, ast.Constant)
+            or not isinstance(key.value, str)
+        ):
+            return
+        sources.setdefault(key.value, set()).add(_body_value_source(value, params))
+
+    def add_dict_fields(value: ast.Dict) -> None:
+        for key, field_value in zip(value.keys, value.values):
+            if key is not None:
+                add(key, field_value, value)
+
+    if isinstance(body, ast.Dict):
+        add_dict_fields(body)
+    elif isinstance(body, ast.Name):
+        for node in (node for stmt in stmts for node in ast.walk(stmt)):
+            if not is_unconditional(node):
+                continue
+            if isinstance(node, ast.Assign):
+                targets = node.targets
+                value = node.value
+            elif isinstance(node, ast.AnnAssign):
+                targets = [node.target]
+                value = node.value
+            else:
+                continue
+            for target in targets:
+                if _is_named(target, body.id) and isinstance(value, ast.Dict):
+                    add_dict_fields(value)
+                elif (
+                    isinstance(target, ast.Subscript)
+                    and _is_named(target.value, body.id)
+                    and value is not None
+                ):
+                    add(target.slice, value, node)
+
+    return {
+        field: next(iter(field_sources)) if len(field_sources) == 1 else _UNKNOWN
+        for field, field_sources in sources.items()
+    }
+
+
+def test_body_field_sources_ignore_nested_json_keys() -> None:
+    """Only the JSON envelope may supply a required top-level body property."""
+    extractor = _OpExtractor(tools.create_issue_link)
+    calls = extractor.calls()
+    assert extractor.blocked is None
+    assert [call.json_sources for call in calls] == [
+        {
+            "type": "type",
+            "inwardIssue": "inward_issue",
+            "outwardIssue": "outward_issue",
+        }
+    ]
+
+
+def _omitting_default(default: Any) -> bool:
+    return default is None or default is _UNSET
+
 
 def _literal_values(annotation: Any) -> frozenset[str]:
     """String values of every Literal reachable inside the annotation."""
@@ -671,6 +840,65 @@ def test_query_enum_values_match_the_spec(spec: _Spec) -> None:
         f"{len(findings)} Literal(s) advertise values the spec enum lacks; Jira "
         "silently substitutes its default for these:\n"
         + "\n".join(f"  {f}" for f in findings)
+    )
+
+
+def test_required_json_body_properties_cannot_be_omitted(spec: _Spec) -> None:
+    """A spec-required property must be supplied by a required MCP argument.
+
+    Checking only that the source mentions a field is insufficient: a body
+    builder can omit it when its argument defaults to None or _UNSET. A
+    concrete default is safe because the extracted field is unconditional.
+    """
+    findings: list[str] = []
+    for op, calls in sorted(_extract_ops().analyzed.items()):
+        fn = getattr(tools, op)
+        signature = inspect.signature(fn)
+        for call in calls:
+            matches = spec.candidates(call.path, call.method)
+            if _is_spec_gap(op, call) or len(matches) != 1:
+                continue
+            required = spec.required_bodies[matches[0], call.method].get("json")
+            if not required:
+                continue
+            where = f"{op}: {call.method} {call.path}"
+            if call.json_body is None:
+                findings.append(
+                    f"{where}: forwards an opaque JSON body, so required properties "
+                    f"{sorted(required)} cannot be checked against MCP defaults"
+                )
+                continue
+            for field in sorted(required):
+                if field not in call.json_body:
+                    findings.append(
+                        f"{where}: never sends required JSON body property {field!r}"
+                    )
+                    continue
+                source = call.json_sources.get(field, _UNKNOWN)
+                if source is _CONCRETE:
+                    continue
+                if source is _NULL:
+                    findings.append(
+                        f"{where}: required JSON body property {field!r} always "
+                        "serializes null"
+                    )
+                    continue
+                if source is _UNKNOWN:
+                    findings.append(
+                        f"{where}: cannot prove required JSON body property {field!r} "
+                        "is unconditional"
+                    )
+                    continue
+                default = signature.parameters[source].default
+                if _omitting_default(default):
+                    findings.append(
+                        f"{where}: required JSON body property {field!r} comes from "
+                        f"optional MCP argument {source!r} (default {default!r})"
+                    )
+    assert not findings, (
+        f"{len(findings)} required JSON body property/properties can be omitted. "
+        "Make the MCP argument required or serialize a concrete valid default:\n"
+        + "\n".join(f"  {finding}" for finding in findings)
     )
 
 
