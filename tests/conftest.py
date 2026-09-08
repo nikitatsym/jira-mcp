@@ -8,6 +8,7 @@ from typing import Annotated, Any, Literal
 
 import httpx
 import pytest
+from mcp.types import TextContent
 from pydantic import Field
 
 from jira_mcp import server
@@ -148,6 +149,9 @@ class AgentSimulator:
                     f"Available: {sorted(self._tools.keys())}"
                 )
             result = fn(**kwargs)
+        # Registered tools hand the SDK a one-line JSON text block, not a dict.
+        if isinstance(result, TextContent):
+            result = json.loads(result.text)
         self.call_log.append({"tool": tool_name, "kwargs": kwargs, "result": result})
         if isinstance(result, str):
             try:
