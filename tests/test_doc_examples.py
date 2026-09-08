@@ -9,7 +9,9 @@ at a non-existent op.
 
 from __future__ import annotations
 
+import asyncio
 import inspect
+import json
 
 import pytest
 
@@ -61,3 +63,22 @@ def test_render_group_doc_resolves_meta_and_keeps_generic_form():
         "jira_read", 'operation="$help" or operation="$schema" or operation="<OpName>"', {}
     )
     assert rendered == 'operation="help" or operation="schema" or operation="<OpName>"'
+
+
+def test_registered_tools_emit_compact_json():
+    from mcp.types import TextContent
+
+    assert all(
+        tool.fn_metadata.output_schema is None
+        for tool in server.mcp._tool_manager.list_tools()
+    )
+
+    expected = server._dispatch("schema", "jira_read", {})
+    result = asyncio.run(server.mcp.call_tool("jira_read", {"operation": "schema"}))
+
+    assert result.structured_content is None
+    assert len(result.content) == 1
+    content = result.content[0]
+    assert isinstance(content, TextContent)
+    assert "\n" not in content.text
+    assert json.loads(content.text) == expected
