@@ -2,6 +2,10 @@ name: CI
 
 on:
   workflow_dispatch:
+  # Weekly integration run keeps the free Jira Cloud sandbox from being
+  # deactivated for inactivity (Atlassian does so after ~120 idle days).
+  schedule:
+    - cron: "0 6 * * 1"
   pull_request:
     paths:
       - src/**
@@ -29,6 +33,7 @@ permissions:
 
 jobs:
   check:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
