@@ -6,7 +6,7 @@ import time
 
 import httpx
 
-from .config import get_settings
+from .config import Settings, get_settings
 
 _log = logging.getLogger("jira_mcp.client")
 
@@ -26,8 +26,10 @@ class JiraClient:
         base_url: str | None = None,
         email: str | None = None,
         token: str | None = None,
+        *,
+        settings: Settings | None = None,
     ):
-        s = get_settings()
+        s = settings or get_settings()
         self._base = (base_url or s.jira_url).rstrip("/")
         self._email = email or s.jira_email
         self._token = token or s.jira_token

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+from contextvars import ContextVar
 from typing import Annotated, Any
 
 from pydantic import Field
@@ -24,11 +25,15 @@ from .registry import _UNSET, ROOT, Group, _op
 
 # ── Client singleton ──────────────────────────────────────────────────
 
+# Set by a host serving several Jira instances in one process; unset means the module singleton.
+client_var: ContextVar[JiraClient | None] = ContextVar("jira_client", default=None)
 _client: JiraClient | None = None
 
 
 def _get_client() -> JiraClient:
     global _client
+    if (bound := client_var.get()) is not None:
+        return bound
     if _client is None:
         _client = JiraClient()
     return _client
