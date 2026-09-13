@@ -5,7 +5,7 @@ from mcp.server.transport_security import TransportSecuritySettings
 from .client import JiraClient
 from .config import Settings
 from .server import mcp
-from .tools import client_var
+from .tools import _get_client, client_var
 
 __all__ = ["JiraClient", "Settings", "client_var", "main", "mcp"]
 
@@ -23,6 +23,9 @@ def main() -> None:
     parser.add_argument("--host", default="127.0.0.1", help="bind address for --http")
     parser.add_argument("--port", type=int, default=8000, help="port for --http")
     args = parser.parse_args()
+
+    # Refuse to start on a credential the backend rejects, instead of failing the first call.
+    _get_client().check()
 
     if args.http:
         # Stateless: the gateway in front opens a session per call; nothing outlives a request.

@@ -42,6 +42,13 @@ class JiraClient:
             timeout=30.0,
         )
 
+    def check(self) -> dict:
+        """Verify the credential at startup; returns what the version tool reports."""
+        if not self._base or not self._email or not self._token:
+            raise ValueError("JIRA_URL, JIRA_EMAIL and JIRA_TOKEN must be set")
+        me = self.get("/rest/api/3/myself")
+        return {"status": "ok", "user": me.get("displayName")}
+
     def _handle(self, r: httpx.Response, *, started: float | None = None):
         if started is not None:
             duration_ms = int((time.perf_counter() - started) * 1000)

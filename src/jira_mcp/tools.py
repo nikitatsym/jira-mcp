@@ -178,12 +178,7 @@ def jira_version():
     """Get the Jira MCP server version and service status."""
     from importlib.metadata import version
 
-    try:
-        info = _get_client().get("/rest/api/3/myself")
-        service = {"status": "ok", "user": info.get("displayName")}
-    except Exception:  # noqa: BLE001 - version check must not crash the whole tool
-        service = {"status": "error"}
-    return {"mcp": version("jira-mcp"), "service": service}
+    return {"mcp": version("jira-mcp"), "service": _get_client().check()}
 
 
 # ── Read operations ──────────────────────────────────────────────────

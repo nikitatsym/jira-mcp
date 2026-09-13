@@ -55,7 +55,11 @@ from jira_mcp.registry import _UNSET
 
 # Ops whose call shape the extractor below cannot read. ONLY code shapes belong
 # here - never a name mismatch, which is the whole point of this test.
-UNANALYZABLE_OK: dict[str, str] = {}
+UNANALYZABLE_OK: dict[str, str] = {
+    # check() carries no path of its own: it is the client's startup probe, and
+    # the endpoint it hits is GetMyself's, checked in its own right.
+    "jira_version": "calls the pathless client.check()",
+}
 
 # Ops with no wire call of their own: they only drive other registered ops,
 # whose calls are checked in their own right.
